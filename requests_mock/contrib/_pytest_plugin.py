@@ -65,6 +65,11 @@ def pytest_addoption(parser):
                   'Use case sensitive matching in requests_mock',
                   type=_case_type,
                   default=_case_default)
+    parser.addini('requests_mock_assert_all_requests_are_fired',
+                  'Fail a test at teardown if any registered mock was '
+                  'never requested',
+                  type=_case_type,
+                  default=_case_default)
 
 
 @_fixture_type(scope='function')  # executed on every test
@@ -80,7 +85,10 @@ def requests_mock(request):
     import requests_mock as rm_module
 
     case_sensitive = request.config.getini('requests_mock_case_sensitive')
-    kw = {'case_sensitive': _bool_value(case_sensitive)}
+    assert_all = request.config.getini(
+        'requests_mock_assert_all_requests_are_fired')
+    kw = {'case_sensitive': _bool_value(case_sensitive),
+          'assert_all_requests_are_fired': _bool_value(assert_all)}
 
     with rm_module.Mocker(**kw) as m:
         yield m

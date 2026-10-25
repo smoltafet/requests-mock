@@ -644,3 +644,51 @@ class MockerHttpMethodsTests(base.TestCase):
         )
 
         requests.head(url)
+
+
+class AssertAllRequestsAreFiredTests(base.TestCase):
+
+    def test_all_called_passes(self):
+        with requests_mock.Mocker(
+                assert_all_requests_are_fired=True) as m:
+            m.get('http://test.com/a', text='a')
+            m.get('http://test.com/b', text='b')
+            requests.get('http://test.com/a')
+            requests.get('http://test.com/b')
+        # stop() above must not raise
+
+    def test_uncalled_matcher_fails_at_stop(self):
+        try:
+            with requests_mock.Mocker(
+                    assert_all_requests_are_fired=True) as m:
+                m.get('http://test.com/a', text='a')
+                m.get('http://test.com/b', text='b')
+                requests.get('http://test.com/a')
+        except AssertionError as e:
+            self.assertIn('http://test.com/b', str(e))
+        else:
+            self.fail('AssertionError was not raised at stop()')
+
+    def test_disabled_by_default(self):
+        with requests_mock.Mocker() as m:
+            m.get('http://test.com/never', text='x')
+        # no error without the option
+
+    def test_real_http_matcher_is_exempt(self):
+        with requests_mock.Mocker(
+                assert_all_requests_are_fired=True) as m:
+            m.get('http://test.com/real', real_http=True)
+            m.get('http://test.com/a', text='a')
+            requests.get('http://test.com/a')
+        # the real_http matcher is never recorded as called, and
+        # must not trip the assertion
+
+    def test_adapter_assertion_directly(self):
+        adapter = requests_mock.Adapter()
+        session = requests.Session()
+        session.mount('http://', adapter)
+        adapter.register_uri('GET', 'http://test.com/a', text='a')
+        self.assertRaises(AssertionError,
+                          adapter.assert_all_requests_are_fired)
+        session.get('http://test.com/a')
+        adapter.assert_all_requests_are_fired()

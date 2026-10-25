@@ -210,6 +210,10 @@ class _Matcher(_RequestHistoryTracker):
                 self._match_headers(request) and
                 self._match_additional(request))
 
+    def __str__(self):
+        method = 'ANY' if self._method is ANY else self._method
+        return '%s %s' % (method, self._url)
+
     def __call__(self, request):
         if not self._match(request):
             return None
@@ -259,6 +263,26 @@ class Adapter(BaseAdapter, _RequestHistoryTracker):
                 return resp
 
         raise exceptions.NoMockAddress(request)
+
+    def assert_all_requests_are_fired(self):
+        """Check that every registered matcher was called at least once.
+
+        Matchers registered with real_http are exempt: they intentionally
+        pass requests through to the real HTTP layer, so requests_mock
+        never records a call for them.
+
+        :raises AssertionError: if any matcher was never called.
+        """
+        not_called = [str(matcher) for matcher in self._matchers
+                      if isinstance(matcher, _Matcher)
+                      and not matcher._real_http
+                      and not matcher.called]
+
+        if not_called:
+            raise AssertionError(
+                'Not all requests have been executed. The following '
+                'mocked URIs were never requested: %s'
+                % ', '.join(not_called))
 
     def close(self):
         pass
