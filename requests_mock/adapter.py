@@ -225,6 +225,12 @@ class _Matcher(_RequestHistoryTracker):
             response_matcher = self._responses[0]
 
         self._add_to_history(request)
+
+        if hasattr(self._url, 'search'):
+            # Make the result of matching a regular expression URL
+            # available to response callbacks (and in request history).
+            request._url_match = self._url.search(request.url)
+
         return response_matcher.get_response(request)
 
 

@@ -722,3 +722,62 @@ class SessionAdapterTests(base.TestCase):
         resp = self.session.get(self.url, stream=True)
         resps = [c for c in resp.iter_content(3, decode_unicode=True)]
         self.assertEqual(['hel', 'lo ', 'wor', 'ld'], resps)
+
+
+class RegexMatchTests(base.TestCase):
+
+    def setUp(self):
+        super(RegexMatchTests, self).setUp()
+        self.adapter = requests_mock.Adapter()
+        self.session = requests.Session()
+        self.session.mount('http://', self.adapter)
+        self.session.mount('https://', self.adapter)
+
+    def test_match_available_to_text_callback(self):
+        seen = {}
+
+        def text_callback(request, context):
+            seen['match'] = request.match
+            return 'id=%s' % request.match.group('id')
+
+        self.adapter.register_uri(
+            'GET', re.compile(r'http://test\.com/users/(?P<id>\d+)'),
+            text=text_callback)
+        resp = self.session.get('http://test.com/users/42')
+        self.assertEqual('id=42', resp.text)
+        self.assertIsNotNone(seen['match'])
+        self.assertEqual('42', seen['match'].group('id'))
+        self.assertEqual('http://test.com/users/42', seen['match'].string)
+
+    def test_match_available_in_request_history(self):
+        self.adapter.register_uri(
+            'GET', re.compile(r'http://test\.com/items/(\w+)'), text='resp')
+        self.session.get('http://test.com/items/abc')
+        self.assertEqual(1, len(self.adapter.request_history))
+        match = self.adapter.request_history[0].match
+        self.assertIsNotNone(match)
+        self.assertEqual('abc', match.group(1))
+
+    def test_match_is_none_for_plain_url(self):
+        seen = {}
+
+        def text_callback(request, context):
+            seen['match'] = request.match
+            return 'resp'
+
+        self.adapter.register_uri('GET', 'http://test.com/plain',
+                                  text=text_callback)
+        resp = self.session.get('http://test.com/plain')
+        self.assertEqual('resp', resp.text)
+        self.assertIsNone(seen['match'])
+        self.assertIsNone(self.adapter.request_history[0].match)
+
+    def test_match_not_set_by_failed_matcher(self):
+        # an earlier (more recently registered) regex matcher that does
+        # not match must not leak its match into the serving matcher
+        self.adapter.register_uri('GET', 'http://test.com/x', text='plain')
+        self.adapter.register_uri(
+            'GET', re.compile(r'http://other\.com/(\d+)'), text='regex')
+        resp = self.session.get('http://test.com/x')
+        self.assertEqual('plain', resp.text)
+        self.assertIsNone(self.adapter.request_history[0].match)

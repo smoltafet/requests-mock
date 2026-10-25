@@ -27,6 +27,7 @@ class _RequestObjectProxy(object):
     def __init__(self, request, **kwargs):
         self._request = request
         self._matcher = None
+        self._url_match = None
         self._url_parts_ = None
         self._qs = None
 
@@ -156,8 +157,10 @@ class _RequestObjectProxy(object):
 
     def __getstate__(self):
         # Can't pickle a weakref, but it's a weakref so ok to drop it.
+        # A re.Match object can't be pickled either, so drop it as well.
         d = self.__dict__.copy()
         d['_matcher'] = None
+        d['_url_match'] = None
         return d
 
     @property
@@ -173,6 +176,18 @@ class _RequestObjectProxy(object):
             return None
 
         return self._matcher()
+
+    @property
+    def match(self):
+        """The result of matching the request URL against a regex matcher.
+
+        If the matcher that handled this request was registered with a
+        regular expression URL, this is the :class:`re.Match` object
+        produced by matching the request URL against that expression, so
+        dynamic response callbacks can use any captured groups. It is
+        None for requests handled by non-regex matchers.
+        """
+        return self._url_match
 
     def __str__(self):
         return "{0.method} {0.url}".format(self._request)
